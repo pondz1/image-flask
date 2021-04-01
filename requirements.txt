@@ -2,4 +2,4 @@ Flask==1.1.2
 Flask-Cors==3.0.10
 opencv-python==4.5.1.48
 numpy==1.19.4
-gunicorn
+gunicorn==20.1.0
