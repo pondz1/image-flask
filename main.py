@@ -6,6 +6,7 @@ import cv2
 from flask.helpers import send_file
 import numpy as np
 from flask import Flask
+import os
 
 
 def remove_shadow(img_rgb):
@@ -96,4 +97,6 @@ def get_mouth():
       return 'Not Allow'
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0',port=80)
+    port = int(os.getenv('PORT', 5000))
+    print("Starting app on port %d" % port)
+    app.run(debug=False, port=port, host='0.0.0.0', threaded=True)
