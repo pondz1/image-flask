@@ -1,32 +1,54 @@
+import os
 
+from flask import Flask
 from flask_cors import CORS
 from flask import Flask, request
 import cv2
 from flask.helpers import send_file
 import numpy as np
-from flask import Flask
+
 
 app = Flask(__name__)
 CORS(app)
 
 
-@app.route('/')
-def hello():
-    """Return a friendly HTTP greeting."""
-    return 'Hello World!'
+@app.route("/")
+def hello_world():
+    name = os.environ.get("NAME", "World")
+    return "Hello {}!".format(name)
 
 
 @app.route('/getmouth', methods=['POST', 'GET'])
-def get_mouth():
+def mouth_detect():
     if request.method == 'POST':
         file = request.files['file']
         file.save('./save.jpg')
         img = cv2.imread('./save.jpg')
-        result = find_mouth(img)
-        cv2.imwrite('./save/ok.jpg', result)
+        result = remove_shadow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
+        _, thres = cv2.threshold(
+            gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(
+            thres, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        HEIGT, WIDTH = gray.shape
+
+        max_rec = 0
+        box_rec = [0, 0, 0, 0]
+
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            if y > HEIGT/2 and w > h and (w+h) >= max_rec \
+                    and (x >= WIDTH/4) and (x <= WIDTH - WIDTH/3):
+                max_rec = (w+h)
+                box_rec = [x, y, w, h]
+
+        x, y, w, h = box_rec
+        cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 3)
+        cv2.imwrite('./save/ok.jpg', img)
         return send_file('./save/ok.jpg')
     else:
-      return 'not allow'
+        return 'Not Allow'
 
 
 def remove_shadow(img_rgb):
@@ -39,61 +61,5 @@ def remove_shadow(img_rgb):
         result_planes.append(diff_img)
     return cv2.merge(result_planes)
 
-
-def find_max_ellps(contour, max_list, hight, width):
-    max_ellps = 0
-    for cnt in contour:
-        area = cv2.contourArea(cnt)
-        if area < max_list:
-            continue
-        if cnt.shape[0] > 5:
-            elps = cv2.fitEllipse(cnt)
-            x, y, w, h = cv2.boundingRect(cnt)
-            if y > hight/2 and w > h and elps[1][1] > max_ellps and (elps[0][1] > 0 and elps[0][0] > 0):
-                if elps[2] > 0 and x > width/4 and x < width - width/4:
-                    max_ellps = elps[1][1]
-    return max_ellps
-
-
-def find_max_list(contour):
-    max_list = []
-    for cnt in contour:
-        area = cv2.contourArea(cnt)
-        max_list.append(area)
-
-    max_list.sort()
-    per = int(len(max_list)*1/100)
-    max_c = max_list[len(max_list)-per]
-    return max_c
-
-
-def find_mouth(img):
-    imgrgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = remove_shadow(imgrgb)
-    gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
-    HEIGT, WIDTH = gray.shape
-    _, thres = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    contours, _ = cv2.findContours(thres, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-
-    # cv2.drawContours(img, contours, -1, (0, 255, 0), 3)
-
-    MAXS = find_max_list(contours)
-
-    max_ellps = find_max_ellps(contours, MAXS, HEIGT, WIDTH)
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < MAXS:
-            continue
-        if cnt.shape[0] > 5:
-            elps = cv2.fitEllipse(cnt)
-            x, y, w, h = cv2.boundingRect(cnt)
-            if y > HEIGT/2 and w > h and elps[1][1] == max_ellps:
-                # print(elps)
-                # print(cv2.boundingRect(cnt))
-                # cv2.ellipse(img, elps, (0, 0, 255), 2)
-                cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 5)
-    return img
-
-
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
